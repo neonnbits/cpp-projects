@@ -5,6 +5,9 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+pid_t background_pids[100];
+int bg_idx = 0;
+
 void parse_command(char *input, char **args) {
     int i = 0;
     char *token = strtok(input, " ");
@@ -17,13 +20,32 @@ void parse_command(char *input, char **args) {
     args[i] = NULL; // execvp needs NULL-terminated array
 }
 
-void handle_sigint(int sig) {
-    printf("\nCaught Ctrl+C! But I'm not going to quit.\n");
+void childExit(int sig) {
+    int status;
+    pid_t pid;
+
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        int bg_ps = 0;
+        for (int i = 0; i < bg_idx; i++) {
+            if (pid == background_pids[i]) {
+                bg_ps = 1;
+                background_pids[i] = background_pids[--bg_idx];
+                break;
+            }
+        }
+
+        if (bg_ps) {
+            printf("\n[Process %d] Done\n", pid);
+            printf("prompt > ");
+            fflush(stdout);
+        }
+    }
 }
 
 int main() {
     char input[1024];
     signal(SIGINT, SIG_IGN);
+    signal(SIGCHLD, childExit);
     while (1) {
         printf("prompt > ");
         fflush(stdout);
@@ -64,6 +86,15 @@ int main() {
 
         parse_command(input_copy, args);
 
+        int background = 0;
+        for (int i = 0; args[i] != NULL; i++) {
+            if (strcmp(args[i], "&") == 0) {
+                args[i] = NULL;
+                background = 1;
+                break;
+            }
+        }
+
         pid_t pid = fork();
 
         if (pid == 0) {
@@ -72,12 +103,16 @@ int main() {
             printf("Command not found: %s\n", input);
             exit(1);
         } else if (pid > 0) {
-            int status;
-            wait(&status);
-            // print a newline if the child process was killed with a exit
-            // signal
-            if (WIFSIGNALED(status)) {
-                printf("\n");
+            if (background) {
+                background_pids[bg_idx++] = pid;
+                printf("PS ID: [%d] \n", pid);
+            } else {
+                // Foreground process - wait as normal
+                int status;
+                wait(&status);
+                if (WIFSIGNALED(status)) {
+                    printf("\n");
+                }
             }
         } else {
             printf("Fork Failed\n");
