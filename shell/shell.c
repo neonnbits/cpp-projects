@@ -86,36 +86,93 @@ int main() {
 
         parse_command(input_copy, args);
 
-        int background = 0;
+        int pipe_index = -1;
         for (int i = 0; args[i] != NULL; i++) {
-            if (strcmp(args[i], "&") == 0) {
-                args[i] = NULL;
-                background = 1;
+            if (strcmp(args[i], "|") == 0) {
+                pipe_index = i;
                 break;
             }
         }
 
-        pid_t pid = fork();
+        if (pipe_index != -1) {
+            char *left_args[64];
+            char *right_args[64];
 
-        if (pid == 0) {
-            signal(SIGINT, SIG_DFL);
-            execvp(args[0], args);
-            printf("Command not found: %s\n", input);
-            exit(1);
-        } else if (pid > 0) {
-            if (background) {
-                background_pids[bg_idx++] = pid;
-                printf("PS ID: [%d] \n", pid);
-            } else {
-                // Foreground process - wait as normal
-                int status;
-                wait(&status);
-                if (WIFSIGNALED(status)) {
-                    printf("\n");
+            // Copy left side (before pipe)
+            for (int i = 0; i < pipe_index; i++) {
+                left_args[i] = args[i];
+            }
+            left_args[pipe_index] = NULL;
+
+            // Copy right side (after pipe)
+            int right_index = 0;
+            for (int j = pipe_index + 1; args[j] != NULL; j++) {
+                right_args[right_index] = args[j];
+                right_index++;
+            }
+            right_args[right_index] = NULL;
+
+            int pipefd[2];
+            if (pipe(pipefd) == -1) {
+                printf("Pipe creation failed.\n");
+                continue;
+            }
+
+            pid_t pid1 = fork();
+            if (pid1 == 0) {
+                close(pipefd[0]);
+                dup2(pipefd[1], STDOUT_FILENO);
+                close(pipefd[1]);
+                execvp(left_args[0], left_args);
+                exit(1);
+            }
+
+            pid_t pid2 = fork();
+            if (pid2 == 0) {
+                close(pipefd[1]);
+                dup2(pipefd[0], 0);
+                close(pipefd[0]);
+                execvp(right_args[0], right_args);
+                exit(1);
+            }
+
+            close(pipefd[0]);
+            close(pipefd[1]);
+            wait(NULL);
+            wait(NULL);
+        }
+
+        else {
+            int background = 0;
+            for (int i = 0; args[i] != NULL; i++) {
+                if (strcmp(args[i], "&") == 0) {
+                    args[i] = NULL;
+                    background = 1;
+                    break;
                 }
             }
-        } else {
-            printf("Fork Failed\n");
+            pid_t pid = fork();
+
+            if (pid == 0) {
+                signal(SIGINT, SIG_DFL);
+                execvp(args[0], args);
+                printf("Command not found: %s\n", input);
+                exit(1);
+            } else if (pid > 0) {
+                if (background) {
+                    background_pids[bg_idx++] = pid;
+                    printf("PS ID: [%d] \n", pid);
+                } else {
+                    // Foreground process - wait as normal
+                    int status;
+                    wait(&status);
+                    if (WIFSIGNALED(status)) {
+                        printf("\n");
+                    }
+                }
+            } else {
+                printf("Fork Failed\n");
+            }
         }
     }
 
