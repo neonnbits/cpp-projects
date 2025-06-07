@@ -1,3 +1,4 @@
+#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,6 +86,39 @@ int main() {
         strcpy(input_copy, input);
 
         parse_command(input_copy, args);
+
+        // 1. Parse to find '>' and filename
+        int redirect_index = -1;
+        char *filename = NULL;
+        for (int i = 0; args[i] != NULL; i++) {
+            if (strcmp(args[i], ">") == 0) {
+                redirect_index = i;
+                filename = args[i + 1];
+                args[i] = NULL; // Remove '>' and filename from args
+                break;
+            }
+        }
+
+        if (redirect_index != -1) {
+            // 2. Single fork (not double!)
+            pid_t pid = fork();
+            if (pid == 0) {
+                // 3. Open file and redirect stdout
+                int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (fd == -1) {
+                    printf("Failed to open file\n");
+                    exit(1);
+                }
+                dup2(fd, STDOUT_FILENO); // stdout → file
+                close(fd);
+
+                execvp(args[0], args);
+                exit(1);
+            } else {
+                wait(NULL);
+                continue;
+            }
+        }
 
         int pipe_index = -1;
         for (int i = 0; args[i] != NULL; i++) {
