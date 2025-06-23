@@ -1,0 +1,11 @@
+a.out
+output.txt
+shell.c
+shell.dSYM
+total 96
+drwxr-xr-x@ 6 stark  staff    192 25 May 20:17 .
+drwxr-xr-x  8 stark  staff    256 24 May 21:12 ..
+-rwxr-xr-x  1 stark  staff  34728 25 May 20:17 a.out
+-rw-r--r--  1 stark  staff     36 25 May 20:18 output.txt
+-rw-r--r--@ 1 stark  staff   5766 25 May 20:17 shell.c
+drwxr-xr-x  3 stark  staff     96 24 May 19:33 shell.dSYM
